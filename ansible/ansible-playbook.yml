@@ -1,0 +1,109 @@
+---
+- hosts: beaker-test
+  tasks:
+
+  - name: Update packages to latest
+    yum:
+      name: '*'
+      state: latest
+
+  - name: Install required packages
+    yum:
+      name: "{{ packages }}"
+    vars:
+      packages:
+      - git
+      - vim-enhanced
+
+  - name: Clone beaker repository
+    # Example git checkout from Ansible Playbooks
+    git:
+      repo: 'https://github.com/beaker-project/beaker'
+      dest: /root/beaker/
+      version: develop
+      update: no
+
+  - name: Setup Beaker Server YUM repo
+    get_url:
+      url: https://beaker-project.org/yum/beaker-server-RedHatEnterpriseLinux.repo
+      dest: /etc/yum.repos.d/beaker-server.repo
+      mode: '0640'
+
+  - name: Install EPEL
+    yum:
+      name: epel-release
+
+  - name: Install required packages
+    yum:
+      name: "{{ packages }}"
+    vars:
+      packages:
+      - beaker-integration-tests
+      - htop
+      - mariadb
+      - mariadb-server
+      - tmux
+
+  - name: Install beaker.spec required packages
+    command: yum-builddep -y beaker.spec
+    args:
+      chdir: /root/beaker
+
+  - name: Remove unwanted packages
+    yum:
+      name: "{{ packages }}"
+      state: absent
+    vars:
+      packages:
+      - beaker-client
+      - beaker-common
+      - beaker-integration-tests
+      - beaker-lab-controller
+      - beaker-server
+      - firefox
+
+  - name: Copy MariaDB config file
+    copy:
+      src: my.cnf
+      dest: /etc/my.cnf
+      owner: root
+      group: root
+      mode: '0644'
+
+  - name: Copy setup database script
+    copy:
+      src: setup-database.sh
+      dest: /root/setup-database.sh
+      owner: root
+      group: root
+      mode: '0755'
+
+  - name: enable service mariadb
+    systemd:
+      name: mariadb
+      enabled: yes
+      masked: no
+
+  - name: Start service mariadb
+    systemd:
+      name: mariadb
+      state: started
+
+  - name: Copy Firefox 52.0 RPMs
+    copy:
+      src: "{{ item }}"
+      dest: /root/
+      owner: root
+      group: root
+      mode: '0644'
+    loop:
+      - firefox-52.8.0-1.el6.centos.x86_64.rpm
+      - hunspell-1.2.8-16.el6.x86_64.rpm
+
+  # Tests don't work unless Firefox 52.0 :(
+  - name: Install Firefox 52.0
+    yum:
+      name:
+       - /root/firefox-52.8.0-1.el6.centos.x86_64.rpm
+       - /root/hunspell-1.2.8-16.el6.x86_64.rpm
+      state: present
